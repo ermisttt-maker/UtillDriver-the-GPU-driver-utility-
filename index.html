@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>UtilDriver — GPU Driver Store Cleanup</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A small Windows utility that scans your driver store for old NVIDIA and AMD packages and lets you remove the ones you don't need.">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #10141b;
+    --panel: #161b24;
+    --panel2: #1c222d;
+    --border: #262d3a;
+    --text: #e7ebf1;
+    --muted: #7c8494;
+    --blue: #4fc3dc;
+    --amber: #e8a33d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Work Sans', sans-serif;
+    line-height: 1.6;
+  }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  a { color: var(--blue); }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 28px; }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 0;
+  }
+  header .wrap { display: flex; justify-content: space-between; align-items: center; }
+  .brand { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 17px; letter-spacing: -0.01em; }
+  .brand span { color: var(--blue); }
+  header nav a { color: var(--muted); text-decoration: none; font-size: 14px; margin-left: 24px; }
+  header nav a:hover { color: var(--text); }
+
+  .hero { padding: 72px 0 88px; }
+  .hero .wrap { display: grid; grid-template-columns: 1.1fr 1fr; gap: 56px; align-items: center; }
+  .hero h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 40px;
+    line-height: 1.25;
+    font-weight: 700;
+    max-width: 480px;
+  }
+  .hero p.lede {
+    margin-top: 18px;
+    color: var(--muted);
+    font-size: 16px;
+    max-width: 440px;
+  }
+  .cta-row { margin-top: 32px; display: flex; gap: 14px; align-items: center; }
+  .btn {
+    display: inline-block;
+    padding: 12px 22px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 14.5px;
+    text-decoration: none;
+    font-family: 'Work Sans', sans-serif;
+  }
+  .btn-primary { background: var(--blue); color: #0a1015; }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-ghost { color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--muted); }
+  .req-note { margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+
+  /* mock app window */
+  .mock {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,.5);
+  }
+  .mock-bar { background: var(--panel2); padding: 9px 14px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; }
+  .mock-bar span { width: 10px; height: 10px; border-radius: 50%; background: #333c4a; }
+  .mock-title { padding: 16px 18px 8px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--muted); }
+  .mock-list { padding: 4px 18px 18px; display: flex; flex-direction: column; gap: 2px; }
+  .mock-item { display: flex; align-items: center; gap: 10px; padding: 9px 8px; border-radius: 5px; font-size: 13px; cursor: pointer; }
+  .mock-item:hover { background: var(--panel2); }
+  .mock-item .box { width: 15px; height: 15px; border: 1.5px solid var(--muted); border-radius: 3px; flex-shrink: 0; position: relative; }
+  .mock-item.checked .box { background: var(--amber); border-color: var(--amber); }
+  .mock-item.checked .box::after {
+    content: ''; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px;
+    border: solid #0a1015; border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
+  .mock-item .label { color: var(--text); }
+  .mock-item .inf { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .mock-action { margin: 6px 18px 18px; padding: 10px; text-align: center; background: var(--amber); color: #241705; border-radius: 6px; font-size: 13px; font-weight: 600; }
+
+  .readout {
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 22px 0;
+  }
+  .readout .wrap { display: flex; flex-wrap: wrap; gap: 40px; }
+  .readout-item .k { font-size: 11.5px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+  .readout-item .v { font-size: 15px; margin-top: 3px; }
+
+  section { padding: 72px 0; }
+  section h2 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    margin-bottom: 32px;
+  }
+
+  .steps { display: flex; flex-direction: column; gap: 0; max-width: 620px; }
+  .step { display: flex; gap: 20px; padding: 22px 0; border-bottom: 1px solid var(--border); }
+  .step:last-child { border-bottom: none; }
+  .step .num { font-family: 'JetBrains Mono', monospace; color: var(--blue); font-size: 14px; padding-top: 2px; width: 24px; flex-shrink: 0; }
+  .step h3 { font-size: 16px; font-weight: 600; margin-bottom: 5px; }
+  .step p { color: var(--muted); font-size: 14.5px; max-width: 480px; }
+
+  .caution {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--amber);
+    border-radius: 6px;
+    padding: 20px 24px;
+    max-width: 640px;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .caution strong { color: var(--text); }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 28px 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  footer .wrap { display: flex; justify-content: space-between; }
+
+  @media (max-width: 760px) {
+    .hero .wrap { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 30px; }
+    .readout .wrap { gap: 22px; }
+  }
+
+  a:focus-visible, .btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="brand">Util<span>Driver</span></div>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="https://github.com/ermisttt-maker/UtillDriver-the-GPU-driver-utility-" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <div>
+      <h1>Your driver store is full of GPU packages you already replaced.</h1>
+      <p class="lede">UtilDriver scans Windows' driver store with <code class="mono">pnputil</code>, finds every NVIDIA and AMD package sitting in it, and lets you remove the ones you don't need — without digging through Device Manager.</p>
+      <div class="cta-row">
+        <a href="https://github.com/ermisttt-maker/UtillDriver-the-GPU-driver-utility-/raw/main/UtillDriver.exe" class="btn btn-primary">Download for Windows</a>
+        <a href="https://github.com/ermisttt-maker/UtillDriver-the-GPU-driver-utility-" class="btn btn-ghost" target="_blank" rel="noopener">View source</a>
+      </div>
+      <p class="req-note">Windows 10/11 · run as Administrator · no install required</p>
+    </div>
+
+    <div class="mock">
+      <div class="mock-bar"><span></span><span></span><span></span></div>
+      <div class="mock-title">Detected NVIDIA &amp; AMD driver packages</div>
+      <div class="mock-list">
+        <div class="mock-item checked"><div class="box"></div><div><div class="label">NVIDIA — Display driver</div><div class="inf">oem12.inf</div></div></div>
+        <div class="mock-item checked"><div class="box"></div><div><div class="label">NVIDIA — Display driver</div><div class="inf">oem9.inf</div></div></div>
+        <div class="mock-item"><div class="box"></div><div><div class="label">NVIDIA — Display driver</div><div class="inf">oem21.inf</div></div></div>
+        <div class="mock-item"><div class="box"></div><div><div class="label">AMD — Chipset driver</div><div class="inf">oem14.inf</div></div></div>
+      </div>
+      <div class="mock-action">Uninstall selected drivers</div>
+    </div>
+  </div>
+</div>
+
+<div class="readout">
+  <div class="wrap">
+    <div class="readout-item"><div class="k mono">SCANS VIA</div><div class="v">pnputil /enum-drivers</div></div>
+    <div class="readout-item"><div class="k mono">FILTERS</div><div class="v">NVIDIA, AMD</div></div>
+    <div class="readout-item"><div class="k mono">REQUIRES</div><div class="v">Administrator</div></div>
+    <div class="readout-item"><div class="k mono">SIZE</div><div class="v">~13 MB, single file</div></div>
+  </div>
+</div>
+
+<section id="how">
+  <div class="wrap">
+    <h2>How it works</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="num mono">01</div>
+        <div>
+          <h3>Scan the driver store</h3>
+          <p>UtilDriver runs <code class="mono">pnputil /enum-drivers</code> and reads every published package, matching the provider name against NVIDIA and AMD, then deduplicating by INF filename.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num mono">02</div>
+        <div>
+          <h3>Pick what to remove</h3>
+          <p>Tick the packages you want gone. Each row shows the provider and the exact INF reference, so you know precisely what you're selecting.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num mono">03</div>
+        <div>
+          <h3>Force-uninstall</h3>
+          <p>After a confirmation prompt, UtilDriver calls <code class="mono">pnputil /delete-driver /uninstall /force</code> for each package and reports success or failure per item.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Before you uninstall</h2>
+    <div class="caution">
+      <strong>Force-removing the driver package currently bound to your active GPU can black-screen your session until reboot.</strong>
+      Stick to older, unused packages — the ones from previous driver versions — rather than whichever one is currently active. If you're not sure which is active, check Device Manager first.
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>UtilDriver — built for cleaning up after too many driver updates.</span>
+    <a href="https://github.com/ermisttt-maker/UtillDriver-the-GPU-driver-utility-" target="_blank" rel="noopener">Source on GitHub</a>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('.mock-item').forEach(item => {
+    item.addEventListener('click', () => item.classList.toggle('checked'));
+  });
+</script>
+
+</body>
+</html>
